@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rafael Basileu BotAnalize de Cores double Blaze</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            text-align: center;
+            padding: 20px;
+        }
+        header {
+            background-color: #007b5e;
+            color: white;
+            padding: 10px 0;
+        }
+        .numbers-container {
+            display: grid;
+            grid-template-columns: repeat(5, 50px);
+            gap: 10px;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        .num-btn {
+            width: 50px;
+            height: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .red { background-color: red; color: white; }
+        .black { background-color: black; color: white; }
+        .white { background-color: white; color: black; }
+        #resultados {
+            margin-top: 20px;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            display: inline-block;
+            text-align: left;
+        }
+        #chart-container {
+            width: 80%;
+            margin: 20px auto;
+        }
+        .button-container {
+            margin-top: 20px;
+        }
+        .action-btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007b5e;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .action-btn:hover {
+            background-color: #005f43;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Basi_leuBot de Cores</h1>
+    </header>
+    
+    <main>
+                <div class="button-container">
+            <button class="action-btn" id="send-win">Enviar Win</button>
+            <button class="action-btn" id="send-g1">Enviar G1</button>
+            <button class="action-btn" id="send-g2">Enviar G2</button>
+        </div>
+        
+        <div class="numbers-container"></div>
+        <div id="resultados">
+            <h2>Resultados</h2>
+            <p id="prediction">Próxima Cor: Nenhuma</p>
+            <p id="result">Último Resultado: --</p>
+            <p id="wins">Vitórias: 0</p>
+            <p id="losses">Derrotas: 0</p>
+            <p id="gales">Gales: 0</p>
+            <h3>Histórico de Jogos:</h3>
+            <ul id="history"></ul>
+        </div>
+
+
+
+        <div id="chart-container">
+            <canvas id="colorChart"></canvas>
+        </div>
+    </main>
+
+    <script>
+        const TELEGRAM_TOKEN = '7715353580:AAGtcVsyOcM3ynlIrvftIeadrC04oEI8zd8';
+        const CHAT_ID = '5091211608';
+        const numbersContainer = document.querySelector('.numbers-container');
+        const historyList = document.getElementById('history');
+
+        let numbers = [];
+        let wins = 0;
+        let losses = 0;
+        let galeCount = 0;
+        let lastPrediction = null;
+        let predictionSent = false;
+
+        const numberConfig = [
+            { num: 0, color: "white" },
+            { num: 1, color: "red" }, { num: 2, color: "red" }, { num: 3, color: "red" },
+            { num: 4, color: "red" }, { num: 5, color: "red" }, { num: 6, color: "red" }, { num: 7, color: "red" },
+            { num: 8, color: "black" }, { num: 9, color: "black" }, { num: 10, color: "black" },
+            { num: 11, color: "black" }, { num: 12, color: "black" }, { num: 13, color: "black" }, { num: 14, color: "black" }
+        ];
+
+        const patterns = { red: 0, black: 0, white: 0 };
+
+        // Create number buttons
+        numberConfig.forEach(({ num, color }) => {
+            const button = document.createElement("button");
+            button.className = `num-btn ${color}`;
+            button.textContent = num;
+            button.onclick = () => registerNumber(num, color);
+            numbersContainer.appendChild(button);
+        });
+
+        // Register number and trigger analysis
+        function registerNumber(num, color) {
+            numbers.push({ num, color });
+            updateHistory(num, color);
+
+            // Analyze the sequences every 12 and 6 rounds
+            if (numbers.length % 8 === 0) {
+                lastPrediction = predictNextColor(12);
+                document.getElementById("prediction").textContent = `Próxima Cor: ${lastPrediction.color}`;
+                sendPredictionToTelegram(lastPrediction);
+                predictionSent = true;
+            }
+
+            if (numbers.length % 4 === 0) {
+                analyzeAndDisplayPatterns();
+            }
+
+            if (predictionSent) {
+                checkWinOrLoss(color, num);
+                predictionSent = false;
+            }
+        }
+
+        // Predict next color based on the last N rounds
+        function predictNextColor(rounds) {
+            const recentNumbers = numbers.slice(-rounds);
+            let colorCount = { red: 0, black: 0, white: 0 };
+
+            recentNumbers.forEach(({ color }) => colorCount[color]++);
+            let mostFrequentColor = Object.keys(colorCount).reduce((a, b) => (colorCount[a] > colorCount[b] ? a : b));
+
+            return { color: mostFrequentColor };
+        }
+
+        // Send prediction to Telegram
+        function sendPredictionToTelegram({ color }) {
+            let message = `🎯 Previsão de Cor:Branco+ ${color.toUpperCase()}`;
+            sendMessageToTelegram(message);
+        }
+
+        // Analyze win/loss based on prediction
+        function checkWinOrLoss(predictedColor, num) {
+            if (!lastPrediction) return;
+
+            let actualColor = predictedColor;
+            let resultText = actualColor === lastPrediction.color ? "✅ WIN" : "❌ LOSS";
+
+            // Se a previsão acertar a cor
+            if (resultText === "✅ WIN") {
+                wins++;
+                galeCount = 0;
+            } else {
+                // Se errar, verifique o galé
+                if (galeCount === 0) {
+                    galeCount++;
+                    resultText = "❌ LOSS (Galé 1)";
+                } else if (galeCount === 1) {
+                    galeCount++;
+                    resultText = "❌ LOSS (Galé 2)";
+                } else {
+                    losses++;
+                    galeCount = 0;
+                    resultText = "❌ LOSS";
+                }
+            }
+
+            // Atualizar o estado no frontend
+            document.getElementById("result").textContent = `Último Resultado: ${resultText}`;
+            document.getElementById("wins").textContent = `Vitórias: ${wins}`;
+            document.getElementById("losses").textContent = `Derrotas: ${losses}`;
+            document.getElementById("gales").textContent = `Gales: ${galeCount}`;
+
+            // Enviar a mensagem para o Telegram
+            sendMessageToTelegram(`📊 Resultado: ${resultText}\n🎯 Previsão: ${lastPrediction.color.toUpperCase()}\n🎲 Cor Sorteada: ${actualColor.toUpperCase()}`);
+            lastPrediction = null;
+        }
+
+        // Update game history on the screen
+        function updateHistory(num, color) {
+    const li = document.createElement("li");
+    li.textContent = `Número: ${num}, Cor: ${color}`;
+    historyList.prepend(li); // Adiciona no topo da lista
+}
+
+        // Analyze and display color patterns
+        function analyzeAndDisplayPatterns() {
+            let colorCount = { red: 0, black: 0, white: 0 };
+
+            numbers.forEach(({ color }) => colorCount[color]++);
+            patterns.red = colorCount.red;
+            patterns.black = colorCount.black;
+            patterns.white = colorCount.white;
+
+            updateChart();
+        }
+
+        // Update the color distribution chart
+        function updateChart() {
+            const ctx = document.getElementById('colorChart').getContext('2d');
+            const colorChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Vermelho', 'Preto', 'Branco'],
+                    datasets: [{
+                        label: 'Distribuição de Cores',
+                        data: [patterns.red, patterns.black, patterns.white],
+                        backgroundColor: ['red', 'black', 'white'],
+                        borderColor: ['red', 'black', 'white'],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        // Send message to Telegram
+        function sendMessageToTelegram(message) {
+            const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage?chat_id=${CHAT_ID}&text=${encodeURIComponent(message)}`;
+            fetch(url)
+                .then(response => response.json())
+                .then(data => console.log("Mensagem enviada para o Telegram:", data))
+                .catch(error => console.error("Erro ao enviar mensagem para o Telegram:", error));
+        }
+
+        // Button event listeners
+        document.getElementById('send-win').addEventListener('click', () => {
+            sendMessageToTelegram("🚀 Vitória confirmada!");
+        });
+
+        document.getElementById('send-g1').addEventListener('click', () => {
+            sendMessageToTelegram("⚡ G1 - Primeira tentativa");
+        });
+
+        document.getElementById('send-g2').addEventListener('click', () => {
+            sendMessageToTelegram("⚡ G2 - Segunda tentativa");
+        });
+    </script>
+</body>
+</html>
